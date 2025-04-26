@@ -78,8 +78,13 @@ export interface Payment {
   groupId: string;
   amount: number;
   date: string; // ISO string
-  status: 'paid' | 'pending';
+  status: 'paid' | 'pending' | 'refund';
   note?: string;
+  branch?: string;
+  employeeId?: string;
+  groupLevelAmount?: number;
+  previouslyPaid?: number;
+  remaining?: number;
 }
 
 export type Group = {
@@ -98,12 +103,32 @@ export type Group = {
   endDate: string;
   status: string;
   studentIds: string[];
+  lecturesDone: number; // عدد المحاضرات المنفذة
+  lectureCount: number; // عدد محاضرات المجموعة
+  price: number;
+};
+
+// جدول المحاضرات
+export type Lecture = {
+  id: string;
+  groupId: string;
+  date: string;
+  instructorId: string;
+  lectureNumber: number;
+  image?: string;
+};
+
+// جدول حضور الطلاب لكل محاضرة
+export type LectureAttendance = {
+  lectureId: string;
+  studentApplicationNumber: string;
+  present: boolean;
 };
 
 export type Student = {
   id: string;
   name: string;
-  phone: string;
+  mobile: string;
   applicationNumber: string;
   // ... أي خصائص أخرى لازمة
 };

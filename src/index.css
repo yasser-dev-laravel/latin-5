@@ -94,7 +94,6 @@
   }
 }
 
-/* Custom animations */
 @layer utilities {
   .animate-fade-in {
     animation: fadeIn 0.3s ease-in-out;
@@ -102,6 +101,16 @@
   
   .animate-slide-in {
     animation: slideIn 0.3s ease-in-out;
+  }
+
+  .sidebar-group-item:hover, .sidebar-group-item:focus {
+    background-color: hsl(var(--sidebar-primary));
+    color: hsl(var(--sidebar-primary-foreground));
+  }
+
+  .sidebar-group-item.active {
+    background-color: hsl(var(--sidebar-accent));
+    color: hsl(var(--sidebar-accent-foreground));
   }
 }
 

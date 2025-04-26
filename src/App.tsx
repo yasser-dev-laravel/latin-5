@@ -25,6 +25,8 @@ import Groups from "./pages/Groups";
 import Attendance from "./pages/Attendance";
 import Settings from "./pages/Settings";
 import { initializeData } from "./utils/mockData";
+import Roles from "./pages/Roles";
+import Receipts from "./pages/Receipts";
 
 const queryClient = new QueryClient();
 
@@ -66,6 +68,8 @@ const AuthWrapper = () => {
         <Route path="/groups" element={<Groups />} />
         <Route path="/attendance" element={<Attendance />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/roles" element={<Roles />} />
+        <Route path="/receipts" element={<Receipts />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Layout>

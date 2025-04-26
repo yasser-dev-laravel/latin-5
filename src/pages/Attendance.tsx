@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Upload } from "lucide-react";
 import { getFromLocalStorage, saveToLocalStorage, generateId, generateCode } from "@/utils/localStorage";
-import { Branch, Lab, Group, CourseLevel, Student } from "@/utils/mockData";
+import { Branch, Lab, Group, CourseLevel, Student, Course } from "@/utils/mockData";
 import { toast } from "react-hot-toast";
 
 const TIME_SLOTS = Array.from({ length: 31 }, (_, i) => {
@@ -34,6 +34,34 @@ export function getArabicDayName(day: number) {
   return ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"][day];
 }
 
+// دالة مساعدة لإظهار بيانات المحاضرة بشكل منسق على سطرين
+function getCourseLevelLectureLabel(group: Group) {
+  const courses: Course[] = getFromLocalStorage("latin_academy_courses", []);
+  const levels: CourseLevel[] = getFromLocalStorage("latin_academy_levels", []);
+  const instructors: any[] = getFromLocalStorage("latin_academy_employees", []);
+  const course = courses.find(c => c.id === group.courseId);
+  const level = levels.find(l => l.id === group.levelId);
+  const instructor = instructors.find(i => i.id === group.instructorId);
+  const sessions = getFromLocalStorage<any[]>(`latin_academy_sessions_${group.id}`, []);
+  const lectureNumber = sessions.length + 1;
+  // السطر الأول: اسم المجموعة مع كود المجموعة
+  // السطر الثاني: اسم الكورس - المستوى - اسم المحاضر - رقم المحاضرة
+  return (
+    <span className="flex flex-col text-xs text-right whitespace-pre-line">
+      <span className="font-bold text-sm">
+        {group.name}
+        <span className="font-mono text-xs ml-2">({group.code})</span>
+      </span>
+      <span>
+        {course?.name || "-"}
+        {level ? ` - المستوى ${level.levelNumber}` : ""}
+        {instructor ? ` - ${instructor.name}` : ""}
+        {` - المحاضرة ${lectureNumber}`}
+      </span>
+    </span>
+  );
+}
+
 export default function Attendance() {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0,10));
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -48,6 +76,8 @@ export default function Attendance() {
   const [showEndOptions, setShowEndOptions] = useState(false);
   const [isLastSession, setIsLastSession] = useState(false);
   const [levels, setLevels] = useState<CourseLevel[]>([]);
+  const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
+  const [autoNewGroup, setAutoNewGroup] = useState<any | null>(null);
 
   useEffect(() => {
     setBranches(getFromLocalStorage<Branch[]>("latin_academy_branches", []));
@@ -96,7 +126,7 @@ export default function Attendance() {
 
   const handleSaveAttendance = () => {
     const group = attendanceDialog.group!;
-    const absents = Object.entries(attendance).filter(([id, v]) => !v).map(([id]) => students.find(s => s.id === id)?.phone).filter(Boolean) as string[];
+    const absents = Object.entries(attendance).filter(([id, v]) => !v).map(([id]) => students.find(s => s.id === id)?.mobile).filter(Boolean) as string[];
     // حفظ السيشن
     const sessions = getFromLocalStorage<any[]>(`latin_academy_sessions_${group.id}`, []);
     saveToLocalStorage(`latin_academy_sessions_${group.id}`, [...sessions, {
@@ -106,9 +136,42 @@ export default function Attendance() {
       image: sessionImage
     }]);
     handleSendWhatsApp(absents, group);
-    // إذا كانت آخر محاضرة، أظهر خيارات إنهاء/استمرار/ترقية
-    if (isLastSession) {
-      setShowEndOptions(true);
+
+    // تحديث عدد المحاضرات المنفذة للمجموعة
+    const allGroups = getFromLocalStorage<Group[]>("latin_academy_groups", []);
+    const updatedGroups = allGroups.map(g => g.id === group.id ? { ...g, lecturesDone: (g.lecturesDone || 0) + 1 } : g);
+    saveToLocalStorage("latin_academy_groups", updatedGroups);
+
+    // تسجيل المحاضرة في جدول المحاضرات
+    const lectures = getFromLocalStorage<any[]>("latin_academy_lectures", []);
+    const newLectureId = generateId("lec-");
+    const newLecture = {
+      id: newLectureId,
+      groupId: group.id,
+      date,
+      instructorId: group.instructorId,
+      lectureNumber: sessions.length + 1,
+      image: sessionImage
+    };
+    saveToLocalStorage("latin_academy_lectures", [...lectures, newLecture]);
+
+    // تسجيل حضور الطلاب في جدول فرعي
+    const lectureAttendance = getFromLocalStorage<any[]>("latin_academy_lecture_attendance", []);
+    const records = Object.entries(attendance).map(([sid, present]) => {
+      const student = students.find(s => s.id === sid);
+      return student ? {
+        lectureId: newLectureId,
+        studentApplicationNumber: student.applicationNumber,
+        present
+      } : null;
+    }).filter(Boolean);
+    saveToLocalStorage("latin_academy_lecture_attendance", [...lectureAttendance, ...records]);
+
+    // تحقق إذا وصلنا لنهاية عدد محاضرات المجموعة أو تجاوزناه
+    const lectureCount = group.lectureCount || 0;
+    const currentLecture = sessions.length + 1;
+    if (currentLecture >= lectureCount && lectureCount > 0) {
+      setTimeout(() => setShowEndOptions(true), 300); // أظهر نافذة الخيارات بعد الحفظ
     } else {
       setAttendanceDialog({ open: false, group: null, slot: "" });
     }
@@ -161,6 +224,32 @@ export default function Attendance() {
     setAttendanceDialog({ open: false, group: null, slot: "" });
   };
 
+  // نافذة ترقية المجموعة (إضافة مجموعة جديدة بمستوى أعلى مع تعبئة تلقائية)
+  const handleUpgradeAndCreateGroup = () => {
+    if (!attendanceDialog.group) return;
+    const group = attendanceDialog.group;
+    const groupLevel = levels.find(l => l.id === group.levelId);
+    const courseLevels = levels.filter(l => l.courseId === group.courseId).sort((a, b) => a.levelNumber - b.levelNumber);
+    const nextLevel = courseLevels.find(l => l.levelNumber === (groupLevel?.levelNumber || 0) + 1);
+    if (!nextLevel) {
+      toast.error("لا يوجد مستوى تالي لهذا الكورس!");
+      return;
+    }
+    // جهز بيانات المجموعة الجديدة تلقائيًا
+    const newGroup = {
+      ...group,
+      id: generateId("grp-"),
+      code: generateCode("GRP", groups),
+      levelId: nextLevel.id,
+      name: group.name.replace(groupLevel?.levelNumber?.toString() || "", nextLevel.levelNumber.toString()),
+      status: "active",
+      startDate: date,
+      endDate: "",
+    };
+    setAutoNewGroup(newGroup);
+    setShowUpgradeDialog(true);
+  };
+
   // هل تم تسجيل حضور هذه المجموعة في هذا اليوم وهذا الوقت؟
   function isSessionTaken(groupId: string, date: string, slot: string) {
     const sessions = getFromLocalStorage<any[]>(`latin_academy_sessions_${groupId}`, []);
@@ -186,13 +275,18 @@ export default function Attendance() {
 
   // التحقق من نهاية المستوى
   function shouldShowEndOptions(group: Group) {
+    // استخدم group.levelId مباشرة لجلب بيانات المستوى
     const groupLevel = levels.find(l => l.id === group.levelId);
-    const sessionNum = getSessionNumber(group.id);
-    return groupLevel && sessionNum >= groupLevel.lectureCount;
+    if (!groupLevel) return false;
+    // عدد المحاضرات المسجلة فعلياً
+    const sessions = getFromLocalStorage<any[]>(`latin_academy_sessions_${group.id}`, []);
+    return sessions.length >= groupLevel.lectureCount;
   }
 
   const filteredLabs = selectedBranch ? labs.filter(l => l.branchId === selectedBranch) : [];
-  const dayGroups = getDayGroups(groups, date, filteredLabs);
+  // فلترة المجموعات لتظهر فقط النشطة
+  const activeGroups = groups.filter(g => g.status === "active");
+  const dayGroups = getDayGroups(activeGroups, date, filteredLabs);
 
   const handleOpenAttendanceDialog = (group: Group, slot: string) => {
     setAttendanceDialog({ open: true, group, slot });
@@ -252,7 +346,7 @@ export default function Attendance() {
                                 disabled={disabled}
                                 onClick={() => handleOpenAttendanceDialog(group, slot)}
                               >
-                                {group.name} - {group.code} - {group.instructorId}
+                                {getCourseLevelLectureLabel(group)}
                               </Button>
                             ) : "-"}
                           </TableCell>
@@ -284,7 +378,7 @@ export default function Attendance() {
                 {students.filter(s => attendanceDialog.group!.studentIds.includes(s.id)).map(s => (
                   <label key={s.id} className="flex items-center gap-2 mb-1">
                     <input type="checkbox" checked={attendance[s.id] || false} onChange={e => setAttendance(a => ({ ...a, [s.id]: e.target.checked }))} />
-                    {s.name} ({s.phone})
+                    {s.name} ({s.mobile})
                   </label>
                 ))}
               </div>
@@ -299,16 +393,41 @@ export default function Attendance() {
               <Button onClick={handleSaveAttendance} className="mt-2 w-full">حفظ الحضور</Button>
               {showEndOptions && (
                 <div className="mt-4 flex flex-col gap-2">
-                  <div className="font-bold text-center">هذه هي المحاضرة الأخيرة للمجموعة!</div>
-                  <Button variant="destructive" onClick={handleFinishGroup}>إنهاء المجموعة</Button>
-                  <Button variant="default" onClick={handleUpgradeGroup}>ترقية للمستوى التالي</Button>
-                  <Button variant="outline" onClick={() => setAttendanceDialog({ open: false, group: null, slot: "" })}>استمرار المجموعة</Button>
+                  <div className="font-bold text-center">وصلت المجموعة لعدد المحاضرات المحدد!</div>
+                  <Button variant="destructive" onClick={handleFinishGroup}>إنهاء المجموعة فقط</Button>
+                  <Button variant="default" onClick={handleUpgradeAndCreateGroup}>إنهاء وإنشاء مجموعة جديدة بمستوى أعلى</Button>
+                  <Button variant="outline" onClick={() => setAttendanceDialog({ open: false, group: null, slot: "" })}>إضافة محاضرة إضافية للمجموعة</Button>
                 </div>
               )}
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* نافذة إضافة مجموعة جديدة تلقائياً عند الترقية */}
+      <Dialog open={showUpgradeDialog} onOpenChange={setShowUpgradeDialog}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>إنشاء مجموعة جديدة بمستوى أعلى</DialogTitle>
+          </DialogHeader>
+          {autoNewGroup && (
+            <div className="flex flex-col gap-2">
+              <div>سيتم إنشاء مجموعة جديدة تلقائياً بنفس بيانات المجموعة الحالية مع ترقية المستوى.</div>
+              <div><b>اسم المجموعة:</b> {autoNewGroup.name}</div>
+              <div><b>الكود:</b> {autoNewGroup.code}</div>
+              <div><b>المستوى الجديد:</b> {levels.find(l => l.id === autoNewGroup.levelId)?.levelNumber}</div>
+              <Button onClick={() => {
+                saveToLocalStorage("latin_academy_groups", [...groups, autoNewGroup]);
+                toast.success("تم إنشاء المجموعة الجديدة وترقيتها للمستوى الأعلى!");
+                setShowUpgradeDialog(false);
+                setAttendanceDialog({ open: false, group: null, slot: "" });
+              }}>تأكيد وإنشاء المجموعة</Button>
+              <Button variant="outline" onClick={() => setShowUpgradeDialog(false)}>إلغاء</Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

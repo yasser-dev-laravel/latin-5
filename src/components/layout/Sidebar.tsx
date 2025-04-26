@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -44,15 +44,18 @@ interface NavItemProps {
 }
 
 const NavItem = ({ to, icon: Icon, label, active, onClick, collapsed }: NavItemProps) => {
+  // Special styling for group nav item
+  const isGroupNav = to.startsWith("/groups");
   return (
     <Link 
       to={to}
       onClick={onClick}
       className={cn(
         "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+        isGroupNav ? "sidebar-group-item" : "",
         active
-          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-          : "text-sidebar-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
+          ? (isGroupNav ? "active" : "bg-sidebar-accent text-sidebar-accent-foreground")
+          : (isGroupNav ? "" : "text-sidebar-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"),
         collapsed ? "justify-center px-2" : ""
       )}
     >
@@ -71,15 +74,17 @@ interface NavGroupProps {
 
 const NavGroup = ({ title, icon: Icon, children, defaultOpen = false }: NavGroupProps) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
-  
+  const [hovered, setHovered] = useState(false);
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className="mb-1">
       <CollapsibleTrigger asChild>
         <Button
           variant="ghost"
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
           className={cn(
-            "w-full justify-between px-3 py-2 text-sm font-normal",
-            "bg-transparent text-sidebar-foreground hover:bg-sidebar-accent/70"
+            "w-full justify-between px-3 py-2 text-sm font-normal transition-colors duration-150",
+            hovered ? "bg-sidebar-accent/70 text-sidebar-accent-foreground" : "bg-transparent text-sidebar-foreground"
           )}
         >
           <div className="flex items-center gap-3">
@@ -247,6 +252,14 @@ export const Sidebar = ({ isOpen, setIsOpen, onCollapseChange }: SidebarProps) =
                 label={t.departments}
                 active={isActive("/departments")} 
                 onClick={handleNavItemClick} 
+                collapsed={collapsed}
+              />
+              <NavItem
+                to="/receipts"
+                icon={Landmark}
+                label={t.receipts || "الإيصالات"}
+                active={isActive("/receipts")}
+                onClick={handleNavItemClick}
                 collapsed={collapsed}
               />
             </NavGroup>

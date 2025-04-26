@@ -16,6 +16,7 @@ import { Branch, Course } from "@/utils/mockData";
 import { Search } from "lucide-react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { generateId, saveToLocalStorage } from "@/utils/localStorage";
+import StudentReceipts from "@/components/StudentReceipts";
 
 interface Student {
   id: string; // رقم الأبليكيشن
@@ -45,7 +46,7 @@ interface StudentGroupEnrollment {
   remaining: number;
 }
 
-const Students = () => {
+function Students() {
   const [students, setStudents] = useState<Student[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -65,6 +66,7 @@ const Students = () => {
     guardian: { name: "", type: "الأب", mobile: "" },
     groups: [],
   });
+  const [showStudentDialog, setShowStudentDialog] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -72,13 +74,51 @@ const Students = () => {
     const rawBranches = getFromLocalStorage<Branch[]>("latin_academy_branches", []);
     const validBranches = Array.isArray(rawBranches) ? rawBranches.filter(b => b && typeof b.id === 'string' && b.id.trim() !== '' && typeof b.name === 'string' && b.name.trim() !== '') : [];
     setBranches(validBranches);
-    // Courses: ignore any course without id or name (or with empty string)
+    // Courses: ignore any course بدون id أو name
     const rawCourses = getFromLocalStorage<Course[]>("latin_academy_courses", []);
     const validCourses = Array.isArray(rawCourses) ? rawCourses.filter(c => c && typeof c.id === 'string' && c.id.trim() !== '' && typeof c.name === 'string' && c.name.trim() !== '') : [];
     setCourses(validCourses);
-    // Students
+    // Students: إصلاح تلقائي للبيانات القديمة
     const studentsArrRaw = getFromLocalStorage<Student[]>("latin_academy_students", []);
-    const studentsArr = Array.isArray(studentsArrRaw) ? studentsArrRaw.filter(s => s && typeof s === 'object') : [];
+    let fixed = false;
+    const allGroups = getFromLocalStorage<any[]>("latin_academy_groups", []);
+    const allCourses = validCourses;
+    const allBranches = validBranches;
+    const studentsArr = Array.isArray(studentsArrRaw) ? studentsArrRaw.filter(s => s && typeof s === 'object').map(s => {
+      // إصلاح groups
+      if (!Array.isArray(s.groups)) {
+        s.groups = [];
+        fixed = true;
+      }
+      // إصلاح guardian
+      if (!s.guardian || typeof s.guardian !== 'object') {
+        s.guardian = { name: '', type: 'الأب', mobile: '' };
+        fixed = true;
+      } else {
+        if (typeof s.guardian.name !== 'string') s.guardian.name = '';
+        if (typeof s.guardian.type !== 'string') s.guardian.type = 'الأب';
+        if (typeof s.guardian.mobile !== 'string') s.guardian.mobile = '';
+      }
+      // تحديث قائمة المجموعات المسجل بها الطالب فعليًا
+      const enrolledGroups = allGroups.filter(g => Array.isArray(g.studentIds) && g.studentIds.includes(s.id));
+      s.groups = enrolledGroups.map(g => {
+        const course = allCourses.find(c => c.id === g.courseId);
+        const branch = allBranches.find(b => b.id === g.branchId);
+        return {
+          groupId: g.id,
+          groupName: g.name,
+          courseName: course ? course.name : '',
+          branchName: branch ? branch.name : '',
+          status: g.status || '',
+          paid: 0, // يمكن لاحقًا احتساب المدفوع من الإيصالات
+          remaining: 0 // يمكن لاحقًا احتساب المتبقي
+        };
+      });
+      return s;
+    }) : [];
+    if (fixed) {
+      saveToLocalStorage("latin_academy_students", studentsArr);
+    }
     setStudents(studentsArr);
   }, []);
 
@@ -99,6 +139,25 @@ const Students = () => {
     return Math.random().toString(36).slice(-length);
   }
 
+  function generateStudentId(studentsArr: any[]): string {
+    // رقم السنة الحالي (آخر رقمين)
+    const now = new Date();
+    const year = now.getFullYear() % 100;
+    // استخراج كل الطلاب بنفس السنة
+    const prefix = `std-${year}`;
+    const yearStudents = studentsArr.filter(s => typeof s.id === 'string' && s.id.startsWith(prefix));
+    // إيجاد أعلى رقم تسلسلي
+    let maxNum = 1000;
+    yearStudents.forEach(s => {
+      const m = s.id.match(/^std-(\d{2})(\d{4,})$/);
+      if (m && m[2]) {
+        const num = parseInt(m[2], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    });
+    return `std-${year}${maxNum + 1}`;
+  }
+
   const handleAddStudent = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newStudent.name || !newStudent.mobile) {
@@ -108,7 +167,7 @@ const Students = () => {
     // حماية ضد بيانات تالفة أو غير معرفة
     const studentsArrRaw = getFromLocalStorage("latin_academy_students", []);
     const studentsArr = Array.isArray(studentsArrRaw) ? studentsArrRaw.filter(s => s && typeof s === 'object') : [];
-    const newId = generateId("stu-");
+    const newId = generateStudentId(studentsArr);
     const student: Student = {
       ...newStudent,
       id: newId,
@@ -153,6 +212,39 @@ const Students = () => {
       toast({ title: "تمت إضافة البيانات الافتراضية بالعربي!" });
       window.location.reload();
     });
+  };
+
+  // أداة تصحيح أرقام الأبليكيشن لجميع الطلاب في localStorage
+  function fixAllStudentIds() {
+    const studentsArrRaw = getFromLocalStorage("latin_academy_students", []);
+    const studentsArr = Array.isArray(studentsArrRaw) ? studentsArrRaw.filter(s => s && typeof s === 'object') : [];
+    // تجميع الطلاب حسب السنة
+    const studentsByYear: { [year: string]: any[] } = {};
+    studentsArr.forEach(s => {
+      // محاولة استخراج السنة من تاريخ الإضافة أو أقرب تاريخ متاح (أو تاريخ اليوم إذا غير متوفر)
+      let year = new Date().getFullYear() % 100;
+      if (s.createdAt) {
+        year = new Date(s.createdAt).getFullYear() % 100;
+      } else if (s.birthDate) {
+        year = new Date(s.birthDate).getFullYear() % 100;
+      }
+      if (!studentsByYear[year]) studentsByYear[year] = [];
+      studentsByYear[year].push(s);
+    });
+    // إعادة ترقيم الطلاب لكل سنة
+    Object.keys(studentsByYear).forEach(year => {
+      studentsByYear[year].sort((a, b) => (a.createdAt || a.birthDate || "") > (b.createdAt || b.birthDate || "") ? 1 : -1);
+      studentsByYear[year].forEach((s, idx) => {
+        s.id = `std-${year}${1001 + idx}`;
+      });
+    });
+    saveToLocalStorage("latin_academy_students", studentsArr);
+    window.location.reload();
+  }
+
+  const handleStudentRowClick = (student: Student) => {
+    setSelectedStudent(student);
+    setShowStudentDialog(true);
   };
 
   return (
@@ -293,7 +385,7 @@ const Students = () => {
             </TableHeader>
             <TableBody>
               {Array.isArray(filteredStudents) && filteredStudents.map(student => (
-                <TableRow key={student.id} onClick={() => setSelectedStudent(student)} className="cursor-pointer">
+                <TableRow key={student.id} onClick={() => handleStudentRowClick(student)} className="cursor-pointer">
                   <TableCell>{student.id}</TableCell>
                   <TableCell>{student.name}</TableCell>
                   <TableCell>{student.mobile}</TableCell>
@@ -310,59 +402,66 @@ const Students = () => {
           </Table>
         </CardContent>
       </Card>
-      {selectedStudent && (
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle>بيانات الطالب: {selectedStudent.name}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label>رقم الأبليكيشن:</Label> {selectedStudent.id}<br />
-                <Label>اسم الطالب:</Label> {selectedStudent.name}<br />
-                <Label>الموبايل:</Label> {selectedStudent.mobile}<br />
-                <Label>واتساب:</Label> {selectedStudent.whatsapp}<br />
-                <Label>تاريخ الميلاد:</Label> {selectedStudent.birthDate}<br />
-                <Label>المؤهل:</Label> {selectedStudent.qualification}<br />
-                <Label>النوع:</Label> {selectedStudent.gender}<br />
-                <Label>العنوان:</Label> {selectedStudent.address}<br />
-                <Label>اسم ولي الأمر:</Label> {selectedStudent.guardian.name}<br />
-                <Label>نوع ولي الأمر:</Label> {selectedStudent.guardian.type}<br />
-                <Label>موبايل ولي الأمر:</Label> {selectedStudent.guardian.mobile}<br />
-              </div>
-              <div>
-                <Label>المجموعات المسجل بها:</Label>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>المجموعة</TableHead>
-                      <TableHead>الكورس</TableHead>
-                      <TableHead>الفرع</TableHead>
-                      <TableHead>الحالة</TableHead>
-                      <TableHead>المدفوع</TableHead>
-                      <TableHead>المتبقي</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {Array.isArray(selectedStudent.groups) && selectedStudent.groups.map(g => (
-                      <TableRow key={g.groupId}>
-                        <TableCell>{g.groupName || g.groupId}</TableCell>
-                        <TableCell>{g.courseName}</TableCell>
-                        <TableCell>{g.branchName}</TableCell>
-                        <TableCell>{g.status}</TableCell>
-                        <TableCell>{g.paid}</TableCell>
-                        <TableCell>{g.remaining}</TableCell>
+      {/* نافذة بيانات الطالب */}
+      <Dialog open={showStudentDialog} onOpenChange={setShowStudentDialog}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>بيانات الطالب</DialogTitle>
+          </DialogHeader>
+          {selectedStudent && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>رقم الأبليكيشن:</Label> {selectedStudent.id}<br />
+                  <Label>اسم الطالب:</Label> {selectedStudent.name}<br />
+                  <Label>الموبايل:</Label> {selectedStudent.mobile}<br />
+                  <Label>واتساب:</Label> {selectedStudent.whatsapp}<br />
+                  <Label>تاريخ الميلاد:</Label> {selectedStudent.birthDate}<br />
+                  <Label>المؤهل:</Label> {selectedStudent.qualification}<br />
+                  <Label>النوع:</Label> {selectedStudent.gender}<br />
+                  <Label>العنوان:</Label> {selectedStudent.address}<br />
+                  <Label>اسم ولي الأمر:</Label> {selectedStudent.guardian.name}<br />
+                  <Label>نوع ولي الأمر:</Label> {selectedStudent.guardian.type}<br />
+                  <Label>موبايل ولي الأمر:</Label> {selectedStudent.guardian.mobile}<br />
+                </div>
+                <div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>المجموعة</TableHead>
+                        <TableHead>الدورة</TableHead>
+                        <TableHead>الفرع</TableHead>
+                        <TableHead>الحالة</TableHead>
+                        <TableHead>المدفوع</TableHead>
+                        <TableHead>المتبقي</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {Array.isArray(selectedStudent.groups) && selectedStudent.groups.map(g => (
+                        <TableRow key={g.groupId}>
+                          <TableCell>{g.groupName || g.groupId}</TableCell>
+                          <TableCell>{g.courseName}</TableCell>
+                          <TableCell>{g.branchName}</TableCell>
+                          <TableCell>{g.status}</TableCell>
+                          <TableCell>{g.paid}</TableCell>
+                          <TableCell>{g.remaining}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+              {/* إيصالات الطالب */}
+              <div>
+                <h3 className="font-bold mb-2">إيصالات الطالب</h3>
+                <StudentReceipts studentId={selectedStudent.id} />
               </div>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
-};
+}
 
 export default Students;
