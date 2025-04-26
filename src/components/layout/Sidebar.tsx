@@ -121,7 +121,7 @@ const menuTranslations = {
     reports: "التقارير المالية",
     messaging: "إدارة الرسائل",
     campaigns: "الحملات",
-    copyright: "حقوق النشر © 2025 Latin Academy"
+    copyright: "حقوق النشر 2025 Latin Academy"
   },
   en: {
     home: "Home",
@@ -138,14 +138,14 @@ const menuTranslations = {
     groups: "Groups",
     attendance: "Attendance",
     customers: "Customer Management",
-    leads: "Leads",
+    leads: "Potential Leads",
     students: "Students",
     finance: "Financial Management",
     receipts: "Receipts",
     reports: "Financial Reports",
     messaging: "Message Management",
     campaigns: "Campaigns",
-    copyright: "Copyright © 2025 Latin Academy"
+    copyright: "Copyright 2025 Latin Academy"
   }
 };
 
@@ -322,7 +322,7 @@ export const Sidebar = ({ isOpen, setIsOpen, onCollapseChange }: SidebarProps) =
                 <NavItem 
                   to="/leads" 
                   icon={ArrowRight} 
-                  label={t.leads || "العملاء"}
+                  label={t.leads}
                   active={isActive("/leads")} 
                   onClick={handleNavItemClick} 
                   collapsed={collapsed}
@@ -374,7 +374,7 @@ export const Sidebar = ({ isOpen, setIsOpen, onCollapseChange }: SidebarProps) =
           <NavItem 
             to="/campaigns" 
             icon={Upload} 
-            label={t.campaigns || "Campaigns"}
+            label={t.campaigns}
             active={isActive("/campaigns")} 
             onClick={handleNavItemClick} 
             collapsed={collapsed}

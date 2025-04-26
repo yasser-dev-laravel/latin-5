@@ -55,6 +55,8 @@ const Campaigns = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [excelFile, setExcelFile] = useState<File|null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [campaignToDelete, setCampaignToDelete] = useState<string|null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -94,8 +96,11 @@ const Campaigns = () => {
           converted: false,
         }));
         setLeads(leadsArr);
+        e.target.value = "";
         toast({ title: "تم استيراد العملاء بنجاح", description: `عدد العملاء: ${leadsArr.length}` });
       } catch (err: any) {
+        setLeads([]);
+        e.target.value = "";
         toast({ title: "خطأ في الملف", description: err.toString(), variant: "destructive" });
       }
     }
@@ -114,11 +119,12 @@ const Campaigns = () => {
       date: new Date().toISOString(),
       branchId: formData.branchId!,
       courseId: formData.courseId!,
-      leads: leads,
+      leads: leads.map(l => ({ ...l, campaignId: undefined })), // إزالة أي قيمة سابقة للحملات القديمة
     };
     const updated = [...campaigns, newCampaign];
     setCampaigns(updated);
     saveToLocalStorage("latin_academy_campaigns", updated);
+    window.dispatchEvent(new Event("storage")); // تحديث فوري لصفحة العملاء
     setFormData({ name: "", branchId: "", courseId: "" });
     setLeads([]);
     setExcelFile(null);
@@ -161,6 +167,38 @@ const Campaigns = () => {
       toast({ title: "تم تجهيز الرسالة الأولى في واتساب!", description: "أرسلها ثم كرر للعملاء الآخرين." });
     }
     // يمكن لاحقًا عرض جميع الروابط أو نسخها دفعة واحدة
+  };
+
+  // حذف حملة مع تأكيد
+  const handleDeleteCampaign = (id: string) => {
+    setDeleteDialogOpen(true);
+    setCampaignToDelete(id);
+  };
+  const confirmDeleteCampaign = () => {
+    if (!campaignToDelete) return;
+    const updated = campaigns.filter(c => c.id !== campaignToDelete);
+    setCampaigns(updated);
+    saveToLocalStorage("latin_academy_campaigns", updated);
+    window.dispatchEvent(new Event("storage"));
+    setDeleteDialogOpen(false);
+    setCampaignToDelete(null);
+    toast({ title: "تم حذف الحملة بنجاح" });
+  };
+
+  // إضافة عميل جديد مؤقت قبل الحفظ
+  const handleAddTempLead = () => {
+    setLeads([
+      ...leads,
+      {
+        id: generateId("lead-"),
+        name: "",
+        mobile: "",
+        campaignId: "",
+        messages: [],
+        notes: [],
+        converted: false,
+      }
+    ]);
   };
 
   return (
@@ -223,8 +261,8 @@ const Campaigns = () => {
                     <Label>ملف العملاء (إكسيل)</Label>
                     <Input type="file" accept=".xlsx,.xls" onChange={handleExcelUpload} />
                   </div>
-                  {/* عرض جدول العملاء المستوردين */}
-                  {leads.length > 0 && (
+                  {/* عرض جدول العملاء المستوردين والمضافين */}
+                  {(leads.length > 0 || true) && (
                     <div className="space-y-2">
                       <Label>العملاء في الحملة</Label>
                       <Table>
@@ -251,6 +289,7 @@ const Campaigns = () => {
                           ))}
                         </TableBody>
                       </Table>
+                      <Button type="button" onClick={handleAddTempLead} variant="secondary" className="mt-2">إضافة عميل جديد</Button>
                     </div>
                   )}
                 </div>
@@ -276,7 +315,7 @@ const Campaigns = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <Button variant="ghost" size="icon"><Pencil className="h-4 w-4 text-muted-foreground" /></Button>
-                    <Button variant="ghost" size="icon"><Trash className="h-4 w-4 text-destructive" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleDeleteCampaign(camp.id)}><Trash className="h-4 w-4 text-destructive" /></Button>
                   </div>
                 </div>
                 <CardDescription>
@@ -295,6 +334,19 @@ const Campaigns = () => {
       ) : (
         <div className="text-center text-gray-500 mt-10">لا يوجد حملات مسجلة</div>
       )}
+      {/* حوار تأكيد حذف الحملة */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>تأكيد حذف الحملة</DialogTitle>
+            <DialogDescription>هل أنت متأكد أنك تريد حذف هذه الحملة؟ لا يمكن التراجع عن هذا الإجراء.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>إلغاء</Button>
+            <Button variant="destructive" onClick={confirmDeleteCampaign}>حذف</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

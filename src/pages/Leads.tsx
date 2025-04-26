@@ -53,18 +53,39 @@ const Leads = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    setCampaigns(getFromLocalStorage<Campaign[]>("latin_academy_campaigns", []));
+    // جلب الحملات من localStorage
+    let camps = getFromLocalStorage<Campaign[]>("latin_academy_campaigns", []);
+    // إصلاح الحملات: إضافة leads فارغة إذا لم تكن موجودة
+    let changed = false;
+    camps = camps.map(c => {
+      if (!Array.isArray(c.leads)) {
+        changed = true;
+        return { ...c, leads: [] };
+      }
+      return c;
+    });
+    if (changed) {
+      saveToLocalStorage("latin_academy_campaigns", camps);
+      console.log("تم إصلاح الحملات وإضافة leads فارغة حيث يلزم.");
+    }
+    console.log("الحملات من localStorage:", camps);
+    setCampaigns(camps);
     setBranches(getFromLocalStorage<Branch[]>("latin_academy_branches", []));
     setCourses(getFromLocalStorage<Course[]>("latin_academy_courses", []));
     // جمع جميع العملاء من كل الحملات
+    const allLeads: Lead[] = [];
+    camps.forEach(c => c.leads.forEach(l => allLeads.push({ ...l, campaignId: c.id })));
+    setLeads(allLeads);
+    console.log("العملاء المجمعين:", allLeads);
+  
+    // تحديث تلقائي عند تغيير الحملات في localStorage
     const updateLeads = () => {
       const camps = getFromLocalStorage<Campaign[]>("latin_academy_campaigns", []);
+      setCampaigns(camps);
       const allLeads: Lead[] = [];
       camps.forEach(c => c.leads.forEach(l => allLeads.push({ ...l, campaignId: c.id })));
       setLeads(allLeads);
     };
-    updateLeads();
-    // تحديث تلقائي عند تغيير الحملات في localStorage
     window.addEventListener("storage", updateLeads);
     return () => window.removeEventListener("storage", updateLeads);
   }, []);
@@ -116,7 +137,7 @@ const Leads = () => {
   return (
     <div className="p-4 md:p-8">
       <div className="flex flex-col md:flex-row items-center justify-between mb-6">
-        <h2 className="text-3xl font-bold tracking-tight mb-4 md:mb-0">إدارة العملاء</h2>
+        <h2 className="text-3xl font-bold tracking-tight mb-4 md:mb-0">العملاء المحتملين</h2>
         <div className="w-full md:w-auto flex flex-col md:flex-row gap-3">
           <div className="relative w-full md:w-64">
             <Search className="absolute right-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -140,7 +161,13 @@ const Leads = () => {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filteredLeads.map(lead => (
+          {filteredLeads.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                لا يوجد عملاء محتملين بعد
+              </TableCell>
+            </TableRow>
+          ) : filteredLeads.map(lead => (
             <TableRow key={lead.id}>
               <TableCell>{lead.name}</TableCell>
               <TableCell>{lead.mobile}</TableCell>
