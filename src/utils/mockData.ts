@@ -1,4 +1,3 @@
-
 import { saveToLocalStorage, getFromLocalStorage, generateId } from "./localStorage";
 
 export interface Employee {
@@ -72,6 +71,42 @@ export interface Course {
   totalPrice: number;
   levels: CourseLevel[];
 }
+
+export interface Payment {
+  id: string;
+  studentId: string;
+  groupId: string;
+  amount: number;
+  date: string; // ISO string
+  status: 'paid' | 'pending';
+  note?: string;
+}
+
+export type Group = {
+  id: string;
+  code: string;
+  name: string;
+  courseId: string;
+  levelId: string;
+  branchId: string;
+  labId: string;
+  instructorId: string;
+  weeklyDays: string[];
+  startTime: string;
+  duration: number;
+  startDate: string;
+  endDate: string;
+  status: string;
+  studentIds: string[];
+};
+
+export type Student = {
+  id: string;
+  name: string;
+  phone: string;
+  applicationNumber: string;
+  // ... أي خصائص أخرى لازمة
+};
 
 // Initialize data
 export const initializeData = () => {
@@ -339,5 +374,9 @@ export const initializeData = () => {
   
   if (!localStorage.getItem("latin_academy_leads")) {
     saveToLocalStorage("latin_academy_leads", []);
+  }
+  
+  if (!localStorage.getItem("latin_academy_payments")) {
+    saveToLocalStorage("latin_academy_payments", []);
   }
 };

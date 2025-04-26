@@ -20,7 +20,8 @@ import {
   Menu,
   ChevronDown,
   Upload,
-  ArrowRight
+  ArrowRight,
+  Settings
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useAuth } from "@/context/AuthContext";
@@ -121,6 +122,8 @@ const menuTranslations = {
     reports: "التقارير المالية",
     messaging: "إدارة الرسائل",
     campaigns: "الحملات",
+    booking: "الحجوزات والمدفوعات",
+    settings: "الإعدادات",
     copyright: "حقوق النشر 2025 Latin Academy"
   },
   en: {
@@ -145,6 +148,8 @@ const menuTranslations = {
     reports: "Financial Reports",
     messaging: "Message Management",
     campaigns: "Campaigns",
+    booking: "Booking & Payments",
+    settings: "Settings",
     copyright: "Copyright 2025 Latin Academy"
   }
 };
@@ -313,7 +318,14 @@ export const Sidebar = ({ isOpen, setIsOpen, onCollapseChange }: SidebarProps) =
               />
             )}
           </NavGroup>
-          
+          <NavItem 
+            to="/booking" 
+            icon={CreditCard} 
+            label={t.booking}
+            active={isActive("/booking")}
+            onClick={handleNavItemClick} 
+            collapsed={collapsed}
+          />
           {(user.role === "admin" || user.role === "employee") && (
             <>
               <NavGroup title={t.customers} icon={ShoppingBag} defaultOpen={
@@ -376,6 +388,14 @@ export const Sidebar = ({ isOpen, setIsOpen, onCollapseChange }: SidebarProps) =
             icon={Upload} 
             label={t.campaigns}
             active={isActive("/campaigns")} 
+            onClick={handleNavItemClick} 
+            collapsed={collapsed}
+          />
+          <NavItem 
+            to="/settings" 
+            icon={Settings} 
+            label={t.settings || "الإعدادات"}
+            active={isActive("/settings")} 
             onClick={handleNavItemClick} 
             collapsed={collapsed}
           />

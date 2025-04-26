@@ -19,6 +19,11 @@ import LoginForm from "./components/auth/LoginForm";
 import Messaging from "./pages/Messaging";
 import Campaigns from "./pages/Campaigns";
 import Leads from "./pages/Leads";
+import Students from "./pages/Students";
+import Booking from "./pages/Booking";
+import Groups from "./pages/Groups";
+import Attendance from "./pages/Attendance";
+import Settings from "./pages/Settings";
 import { initializeData } from "./utils/mockData";
 
 const queryClient = new QueryClient();
@@ -56,6 +61,11 @@ const AuthWrapper = () => {
         <Route path="/messaging" element={<Messaging />} />
         <Route path="/campaigns" element={<Campaigns />} />
         <Route path="/leads" element={<Leads />} />
+        <Route path="/students" element={<Students />} />
+        <Route path="/booking" element={<Booking />} />
+        <Route path="/groups" element={<Groups />} />
+        <Route path="/attendance" element={<Attendance />} />
+        <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Layout>
